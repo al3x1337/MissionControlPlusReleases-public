@@ -67,3 +67,16 @@ iOSInjectionProject/
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Hotfix & Diagnostic Artifacts
+*.log
+*.txt
+test_*.swift
+sim_mcp.swift
+trigger_mc.swift
+run_log_test.sh
+extracted/
+Mission Control Plus.app/
+*.original
+*.test
+*.tgz
