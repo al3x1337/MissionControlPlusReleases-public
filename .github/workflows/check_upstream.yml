@@ -1,0 +1,69 @@
+name: Check Upstream Releases
+
+on:
+  schedule:
+    - cron: '0 12 * * *' # Run daily at 12:00 UTC
+  workflow_dispatch:     # Allows manual trigger from GitHub Actions UI
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Latest Upstream Release Tag
+        id: get_release
+        run: |
+          LATEST_TAG=$(curl -s "https://api.github.com/repos/ronyfadel/MissionControlPlusReleases/releases/latest" | jq -r .tag_name // empty)
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+            # Fallback to checking appcast.xml if releases API is empty
+            LATEST_TAG=$(curl -s "https://raw.githubusercontent.com/ronyfadel/MissionControlPlusReleases/master/appcast.xml" | grep -o 'sparkle:shortVersionString="[^"]*"' | head -n 1 | cut -d'"' -f2)
+            [ -n "$LATEST_TAG" ] && LATEST_TAG="v$LATEST_TAG"
+          fi
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "Detected latest upstream tag: $LATEST_TAG"
+
+      - name: Compare with Patched Baseline Version (v1.31)
+        id: compare
+        run: |
+          CURRENT_VERSION="v1.31"
+          LATEST="${{ steps.get_release.outputs.latest_tag }}"
+          
+          if [ -n "$LATEST" ] && [ "$LATEST" != "$CURRENT_VERSION" ]; then
+            echo "New version available: $LATEST (current baseline: $CURRENT_VERSION)"
+            echo "new_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "Upstream is still at baseline version ($CURRENT_VERSION)."
+            echo "new_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Notify via GitHub Issue
+        if: steps.compare.outputs.new_release == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const latestTag = '${{ steps.get_release.outputs.latest_tag }}';
+            const issueTitle = `New upstream release detected: ${latestTag}`;
+            
+            // Check if an open issue already exists to avoid duplicates
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              creator: 'github-actions[bot]'
+            });
+            
+            const existingIssue = issues.data.find(issue => issue.title.includes(latestTag));
+            if (existingIssue) {
+              console.log(`Issue already exists for ${latestTag}: #${existingIssue.number}`);
+              return;
+            }
+            
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body: `### New Upstream Release Detected\n\nA new release of Mission Control Plus is available upstream:\n\n- **New Version:** \`${latestTag}\`\n- **Upstream Repository:** [ronyfadel/MissionControlPlusReleases](https://github.com/ronyfadel/MissionControlPlusReleases/releases)\n\nReview the release notes to see if the vertical multi-monitor coordinate bug has been fixed upstream, or apply the hotfix logic to the new release.`
+            });
