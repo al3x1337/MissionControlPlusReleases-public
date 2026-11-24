@@ -16,7 +16,7 @@ jobs:
       - name: Fetch Latest Upstream Release Tag
         id: get_release
         run: |
-          LATEST_TAG=$(curl -s "https://api.github.com/repos/ronyfadel/MissionControlPlusReleases/releases/latest" | jq -r .tag_name // empty)
+          LATEST_TAG=$(curl -s "https://api.github.com/repos/ronyfadel/MissionControlPlusReleases/releases/latest" | jq -r '.tag_name // empty')
           if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
             # Fallback to checking appcast.xml if releases API is empty
             LATEST_TAG=$(curl -s "https://raw.githubusercontent.com/ronyfadel/MissionControlPlusReleases/master/appcast.xml" | grep -o 'sparkle:shortVersionString="[^"]*"' | head -n 1 | cut -d'"' -f2)
